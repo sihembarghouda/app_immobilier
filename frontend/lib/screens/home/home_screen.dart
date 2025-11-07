@@ -24,13 +24,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onItemTapped(int index) {
+    // Update the selected index to reflect the tapped item
     setState(() {
       _selectedIndex = index;
     });
 
+    // Navigate for non-home tabs
     switch (index) {
       case 0:
-        // Already on home
+        // Already on home; optionally scroll to top or refresh
         break;
       case 1:
         Navigator.of(context).pushNamed('/search');
@@ -138,6 +140,8 @@ class _HomeScreenState extends State<HomeScreen> {
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
         type: BottomNavigationBarType.fixed,
+        selectedFontSize: 12,
+        unselectedFontSize: 12,
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home_outlined),
@@ -153,6 +157,11 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icon(Icons.add_circle_outline),
             activeIcon: Icon(Icons.add_circle),
             label: 'Publier',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.message_outlined),
+            activeIcon: Icon(Icons.message),
+            label: 'Messages',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.favorite_outline),
