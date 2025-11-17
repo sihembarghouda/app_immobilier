@@ -4,6 +4,7 @@ class User {
   final String name;
   final String? phone;
   final String? avatar;
+  final String role;
   final DateTime createdAt;
 
   User({
@@ -12,6 +13,7 @@ class User {
     required this.name,
     this.phone,
     this.avatar,
+    this.role = 'visiteur',
     required this.createdAt,
   });
 
@@ -22,6 +24,7 @@ class User {
       name: json['name'],
       phone: json['phone'],
       avatar: json['avatar'],
+      role: json['role'] ?? 'visiteur',
       createdAt: DateTime.parse(json['created_at']),
     );
   }
@@ -33,6 +36,7 @@ class User {
       'name': name,
       'phone': phone,
       'avatar': avatar,
+      'role': role,
       'created_at': createdAt.toIso8601String(),
     };
   }

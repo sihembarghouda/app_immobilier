@@ -2,6 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/property_provider.dart';
+import '../../providers/message_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -32,6 +34,15 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (success && mounted) {
+        // Initialize other providers
+        final propertyProvider =
+            Provider.of<PropertyProvider>(context, listen: false);
+        final messageProvider =
+            Provider.of<MessageProvider>(context, listen: false);
+
+        await propertyProvider.initialize();
+        await messageProvider.initialize();
+
         Navigator.of(context).pushReplacementNamed('/home');
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -56,7 +67,7 @@ class _LoginScreenState extends State<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 60),
-                
+
                 // Logo/Icon
                 Icon(
                   Icons.home_work,
@@ -64,25 +75,25 @@ class _LoginScreenState extends State<LoginScreen> {
                   color: Theme.of(context).colorScheme.primary,
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Title
                 Text(
                   'Immobilier App',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Connectez-vous à votre compte',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.grey[600],
-                  ),
+                        color: Colors.grey[600],
+                      ),
                 ),
                 const SizedBox(height: 48),
-                
+
                 // Email Field
                 TextFormField(
                   controller: _emailController,
@@ -105,7 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Password Field
                 TextFormField(
                   controller: _passwordController,
@@ -140,7 +151,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
                 const SizedBox(height: 24),
-                
+
                 // Login Button
                 Consumer<AuthProvider>(
                   builder: (context, authProvider, _) {
@@ -166,7 +177,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Register Link
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,

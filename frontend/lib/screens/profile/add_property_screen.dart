@@ -57,7 +57,7 @@ class _AddPropertyScreenState extends State<AddPropertyScreen> {
         latitude: 36.8065, // Mock coordinates
         longitude: 10.1815,
         images: _selectedImages.isEmpty
-            ? ['https://via.placeholder.com/400']
+            ? [''] // Empty triggers errorWidget
             : _selectedImages,
         ownerId: '1',
         ownerName: 'John Doe',

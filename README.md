@@ -1,53 +1,30 @@
-# 📱 Application Immobilier - Frontend Flutter
+# 🏠 App Immobilier - Plateforme Immobilière Complète
 
-Application mobile cross-platform pour la recherche, consultation et publication d'annonces immobilières.
+Application complète de gestion immobilière développée avec **Flutter** (frontend) et **Node.js/Express** (backend). Cette plateforme permet aux utilisateurs de rechercher, publier et gérer des biens immobiliers avec géolocalisation, messagerie intégrée et gestion de favoris.
 
-## 📋 Table des matières
-
-- [Aperçu](#aperçu)
-- [Fonctionnalités](#fonctionnalités)
-- [Prérequis](#prérequis)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Lancement](#lancement)
-- [Structure du projet](#structure-du-projet)
-- [Architecture](#architecture)
-- [Dépendances](#dépendances)
-- [Captures d'écran](#captures-décran)
-- [Guide d'utilisation](#guide-dutilisation)
-- [Troubleshooting](#troubleshooting)
-- [Contribution](#contribution)
+[![Flutter Version](https://img.shields.io/badge/Flutter-3.35.4-blue.svg)](https://flutter.dev/)
+[![Node.js Version](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-blue.svg)](https://www.postgresql.org/)
 
 ---
 
-## 🎯 Aperçu
+## 📋 Table des matières
 
-Application mobile développée avec Flutter permettant de :
-- Rechercher des biens immobiliers
-- Publier des annonces
-- Gérer ses favoris
-- Communiquer avec les propriétaires
-- Visualiser les biens sur une carte
-
-**Plateforme** : Android & iOS  
-**Framework** : Flutter 3.0+  
-**Langage** : Dart
+- [Fonctionnalités](#-fonctionnalités)
+- [Architecture](#-architecture)
+- [Technologies](#-technologies)
+- [Installation](#-installation)
+- [Configuration](#-configuration)
+- [Utilisation](#-utilisation)
+- [API Endpoints](#-api-endpoints)
+- [Sécurité](#-sécurité)
+- [Déploiement](#-déploiement)
+- [Problèmes connus](#-problèmes-connus--solutions)
+- [Contribution](#-contribution)
 
 ---
 
 ## ✨ Fonctionnalités
-
-### 🔐 Authentification
-- [x] Inscription avec email et mot de passe
-- [x] Connexion sécurisée
-- [x] Persistance de session
-- [x] Déconnexion avec confirmation
-
-### 🏠 Propriétés
-- [x] Liste des annonces disponibles
-- [x] Détails complets (photos, prix, surface, etc.)
-- [x] Recherche avancée avec filtres :
-  - Ville
   - Type de bien (appartement, maison, villa, studio)
   - Type de transaction (vente, location)
   - Fourchette de prix
