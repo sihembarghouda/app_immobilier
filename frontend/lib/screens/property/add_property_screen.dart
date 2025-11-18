@@ -1,8 +1,13 @@
 // screens/property/add_property_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
+import 'dart:convert';
 import '../../providers/property_provider.dart';
+import '../../providers/location_provider.dart';
+import '../../providers/auth_provider.dart';
+import '../../screens/services/api_service.dart';
 import '../../models/property.dart';
 
 class AddPropertyScreen extends StatefulWidget {
@@ -23,60 +28,174 @@ class _AddPropertyScreenState extends State<AddPropertyScreen> {
   final _bathroomsController = TextEditingController();
   final _addressController = TextEditingController();
   final _cityController = TextEditingController();
+  final ApiService _apiService = ApiService();
 
   String _selectedType = 'apartment';
   String _selectedTransactionType = 'sale';
-  List<String> _selectedImages = [];
+  List<XFile> _selectedImages = [];
   bool _isLoading = false;
+  double? _latitude;
+  double? _longitude;
+
+  @override
+  void initState() {
+    super.initState();
+    _getCurrentLocation();
+
+    // Sync token from auth provider to api service
+    Future.microtask(() {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      if (authProvider.token != null) {
+        _apiService.setToken(authProvider.token!);
+        print('✅ Token synced to API service in add_property_screen');
+      }
+    });
+  }
+
+  Future<void> _getCurrentLocation() async {
+    final locationProvider =
+        Provider.of<LocationProvider>(context, listen: false);
+    if (!locationProvider.hasLocation) {
+      await locationProvider.getCurrentLocation();
+    }
+    if (locationProvider.hasLocation) {
+      setState(() {
+        _latitude = locationProvider.latitude;
+        _longitude = locationProvider.longitude;
+      });
+    }
+  }
 
   Future<void> _pickImages() async {
     final ImagePicker picker = ImagePicker();
-    final List<XFile> images = await picker.pickMultiImage();
+    final List<XFile> images = await picker.pickMultiImage(
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 50,
+    );
 
     setState(() {
-      _selectedImages = images.map((image) => image.path).toList();
+      _selectedImages = images;
     });
   }
 
   Future<void> _submitProperty() async {
     if (_formKey.currentState!.validate()) {
+      // Check if location is available
+      if (_latitude == null || _longitude == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Veuillez activer la géolocalisation'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        await _getCurrentLocation();
+        if (_latitude == null || _longitude == null) {
+          return;
+        }
+      }
+
       setState(() => _isLoading = true);
 
-      final property = Property(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        title: _titleController.text,
-        description: _descriptionController.text,
-        type: _selectedType,
-        transactionType: _selectedTransactionType,
-        price: double.parse(_priceController.text),
-        surface: double.parse(_surfaceController.text),
-        rooms: int.parse(_roomsController.text),
-        bedrooms: int.parse(_bedroomsController.text),
-        bathrooms: int.parse(_bathroomsController.text),
-        address: _addressController.text,
-        city: _cityController.text,
-        latitude: 36.8065, // Mock coordinates
-        longitude: 10.1815,
-        images: _selectedImages.isEmpty
-            ? ['https://via.placeholder.com/400']
-            : _selectedImages,
-        ownerId: '1',
-        ownerName: 'John Doe',
-        ownerPhone: '+216 98 123 456',
-        createdAt: DateTime.now(),
-      );
+      try {
+        // Get current user
+        final authProvider = Provider.of<AuthProvider>(context, listen: false);
+        if (authProvider.user == null) {
+          throw Exception('Utilisateur non connecté');
+        }
 
-      final success =
-          await Provider.of<PropertyProvider>(context, listen: false)
-              .addProperty(property);
+        // Upload images if any selected
+        List<String> imageUrls = [];
+        if (_selectedImages.isNotEmpty) {
+          print('📸 Uploading ${_selectedImages.length} images...');
 
-      setState(() => _isLoading = false);
+          for (var i = 0; i < _selectedImages.length; i++) {
+            try {
+              final image = _selectedImages[i];
+              String imageUrl;
 
-      if (success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Annonce publiée avec succès!')),
+              if (kIsWeb) {
+                // For web, convert to base64
+                final bytes = await image.readAsBytes();
+                final base64Image =
+                    'data:image/jpeg;base64,${base64Encode(bytes)}';
+                imageUrl = await _apiService.uploadImage(base64Image);
+              } else {
+                // For mobile, use file path
+                imageUrl = await _apiService.uploadImage(image.path);
+              }
+
+              imageUrls.add(imageUrl);
+              print('✅ Image ${i + 1}/${_selectedImages.length} uploaded');
+            } catch (e) {
+              print('❌ Failed to upload image ${i + 1}: $e');
+              // Continue with other images
+            }
+          }
+        }
+
+        // Use empty array if no images uploaded (will show fallback in UI)
+        if (imageUrls.isEmpty) {
+          imageUrls.add(''); // Empty string triggers errorWidget
+        }
+
+        final property = Property(
+          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          title: _titleController.text,
+          description: _descriptionController.text,
+          type: _selectedType,
+          transactionType: _selectedTransactionType,
+          price: double.parse(_priceController.text),
+          surface: double.parse(_surfaceController.text),
+          rooms: int.parse(_roomsController.text),
+          bedrooms: int.parse(_bedroomsController.text),
+          bathrooms: int.parse(_bathroomsController.text),
+          address: _addressController.text,
+          city: _cityController.text,
+          latitude: _latitude!,
+          longitude: _longitude!,
+          images: imageUrls,
+          ownerId: authProvider.user!.id.toString(),
+          ownerName: authProvider.user!.name,
+          ownerPhone: authProvider.user!.phone ?? '',
+          createdAt: DateTime.now(),
         );
-        Navigator.of(context).pop();
+
+        final success =
+            await Provider.of<PropertyProvider>(context, listen: false)
+                .addProperty(property);
+
+        if (mounted) {
+          setState(() => _isLoading = false);
+
+          if (success) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Annonce publiée avec succès!'),
+                backgroundColor: Colors.green,
+              ),
+            );
+            Navigator.of(context).pop();
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Erreur lors de la publication'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        print('❌ Submit property error: $e');
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erreur: ${e.toString()}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       }
     }
   }

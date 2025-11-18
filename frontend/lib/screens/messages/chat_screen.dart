@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/message_provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/property_provider.dart';
 import '../../models/message.dart';
+import '../../services/ai_chatbot_service.dart';
 import 'package:intl/intl.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -28,18 +30,41 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
-      Provider.of<MessageProvider>(context, listen: false)
-          .fetchMessages(widget.userId);
+    Future.microtask(() async {
+      final messageProvider =
+          Provider.of<MessageProvider>(context, listen: false);
+
+      // Initialize provider
+      await messageProvider.initialize();
+
+      messageProvider.fetchMessages(widget.userId);
+
+      // If chatting with AI bot, provide it with property data
+      if (AIChatbotService.isChatbot(widget.userId)) {
+        final propertyProvider =
+            Provider.of<PropertyProvider>(context, listen: false);
+        final chatbot = AIChatbotService();
+        if (propertyProvider.properties.isNotEmpty) {
+          chatbot.setProperties(propertyProvider.properties);
+        }
+      }
     });
   }
 
-  void _sendMessage() {
+  void _sendMessage() async {
     if (_messageController.text.trim().isEmpty) return;
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final messageProvider =
         Provider.of<MessageProvider>(context, listen: false);
+
+    // Check if user is authenticated
+    if (authProvider.user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please login to send messages')),
+      );
+      return;
+    }
 
     final message = Message(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -53,8 +78,31 @@ class _ChatScreenState extends State<ChatScreen> {
       createdAt: DateTime.now(),
     );
 
+    final userMessageContent = _messageController.text.trim();
     messageProvider.sendMessage(message);
     _messageController.clear();
+
+    // If chatting with AI bot, generate response
+    if (AIChatbotService.isChatbot(widget.userId)) {
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      final aiResponse =
+          AIChatbotService().generateResponse(userMessageContent);
+
+      final botMessage = Message(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        senderId: AIChatbotService.botUserId,
+        senderName: AIChatbotService.botUserName,
+        senderAvatar: null,
+        receiverId: authProvider.user!.id,
+        receiverName: authProvider.user!.name,
+        receiverAvatar: authProvider.user?.avatar,
+        content: aiResponse,
+        createdAt: DateTime.now(),
+      );
+
+      messageProvider.sendMessage(botMessage);
+    }
 
     // Scroll to bottom
     Future.delayed(const Duration(milliseconds: 100), () {

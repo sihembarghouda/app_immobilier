@@ -18,10 +18,14 @@ exports.getAllProperties = async (req, res) => {
       max_surface
     } = req.query;
 
+    // Get user ID if authenticated, otherwise null
+    const userId = req.user ? req.user.id : null;
+
     let query = `
       SELECT 
         p.*,
         u.name as owner_name,
+        u.phone as owner_phone
         u.phone as owner_phone,
         u.avatar as owner_avatar,
         EXISTS(
@@ -33,6 +37,8 @@ exports.getAllProperties = async (req, res) => {
       WHERE 1=1
     `;
     
+    const params = [];
+    let paramIndex = 1;
     const params = [req.user?.id || null];
     let paramIndex = 2;
 
@@ -95,6 +101,26 @@ exports.getAllProperties = async (req, res) => {
 
     const result = await client.query(query, params);
 
+    // Add is_favorite if user is authenticated
+    let properties = result.rows;
+    if (userId) {
+      const favoriteIds = await client.query(
+        'SELECT property_id FROM favorites WHERE user_id = $1',
+        [userId]
+      );
+      const favoriteSet = new Set(favoriteIds.rows.map(row => row.property_id));
+      properties = properties.map(p => ({
+        ...p,
+        is_favorite: favoriteSet.has(p.id)
+      }));
+    } else {
+      properties = properties.map(p => ({ ...p, is_favorite: false }));
+    }
+
+    res.status(200).json({
+      success: true,
+      count: properties.length,
+      data: properties
     res.status(200).json({
       success: true,
       count: result.rows.length,
@@ -162,6 +188,14 @@ exports.createProperty = async (req, res) => {
   const client = await pool.connect();
   
   try {
+    // Check if user is authenticated
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Vous devez être connecté pour publier une propriété'
+      });
+    }
+
     const {
       title,
       description,

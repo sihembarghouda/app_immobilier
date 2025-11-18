@@ -51,6 +51,7 @@ const runMigration = async () => {
         name VARCHAR(255) NOT NULL,
         phone VARCHAR(50),
         avatar VARCHAR(500),
+        role VARCHAR(20) DEFAULT 'visitor' CHECK (role IN ('buyer', 'seller', 'visitor')),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
@@ -159,10 +160,11 @@ const runMigration = async () => {
 
     // Insert users
     const usersResult = await dbClient.query(
-      `INSERT INTO users (email, password, name, phone) VALUES
-        ('john@example.com', $1, 'John Doe', '+216 98 123 456'),
-        ('ahmed@example.com', $1, 'Ahmed Ben Ali', '+216 22 987 654'),
-        ('fatma@example.com', $1, 'Fatma Trabelsi', '+216 55 444 333')
+      `INSERT INTO users (email, password, name, phone, role) VALUES
+        ('john@example.com', $1, 'John Doe', '+216 98 123 456', 'buyer'),
+        ('ahmed@example.com', $1, 'Ahmed Ben Ali', '+216 22 987 654', 'seller'),
+        ('fatma@example.com', $1, 'Fatma Trabelsi', '+216 55 444 333', 'seller'),
+        ('visitor@example.com', $1, 'Visitor User', '+216 55 111 222', 'visitor')
       RETURNING id`,
       [hashedPassword]
     );

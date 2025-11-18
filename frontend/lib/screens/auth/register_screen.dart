@@ -2,6 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/property_provider.dart';
+import '../../providers/message_provider.dart';
+import '../../utils/role_helper.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -18,6 +21,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _confirmPasswordController = TextEditingController();
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  String _selectedRole = UserRole.visiteur; // Rôle par défaut
 
   @override
   void dispose() {
@@ -35,9 +39,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
         _nameController.text.trim(),
         _emailController.text.trim(),
         _passwordController.text,
+        _selectedRole, // Utiliser le rôle sélectionné
       );
 
       if (success && mounted) {
+        // Initialize other providers
+        final propertyProvider =
+            Provider.of<PropertyProvider>(context, listen: false);
+        final messageProvider =
+            Provider.of<MessageProvider>(context, listen: false);
+
+        await propertyProvider.initialize();
+        await messageProvider.initialize();
+
         Navigator.of(context).pushReplacementNamed('/home');
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -65,24 +79,89 @@ class _RegisterScreenState extends State<RegisterScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 20),
-                
+
                 Text(
                   'Créer un compte',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Rejoignez-nous dès maintenant',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: Colors.grey[600],
-                  ),
+                        color: Colors.grey[600],
+                      ),
                 ),
                 const SizedBox(height: 32),
-                
+
+                // Role Selection
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey[300]!),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Je suis un :',
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                      ),
+                      const SizedBox(height: 12),
+                      ...UserRole.getAllRoles()
+                          .map((role) => RadioListTile<String>(
+                                title: Row(
+                                  children: [
+                                    Text(
+                                      role['icon']!,
+                                      style: const TextStyle(fontSize: 24),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            role['label']!,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                          Text(
+                                            role['description']!,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[600],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                value: role['value']!,
+                                groupValue: _selectedRole,
+                                onChanged: (String? value) {
+                                  setState(() {
+                                    _selectedRole = value ?? UserRole.visiteur;
+                                  });
+                                },
+                                contentPadding: EdgeInsets.zero,
+                              ))
+                          .toList(),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
                 // Name Field
                 TextFormField(
                   controller: _nameController,
@@ -101,7 +180,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Email Field
                 TextFormField(
                   controller: _emailController,
@@ -124,7 +203,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Password Field
                 TextFormField(
                   controller: _passwordController,
@@ -159,7 +238,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Confirm Password Field
                 TextFormField(
                   controller: _confirmPasswordController,
@@ -194,7 +273,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   },
                 ),
                 const SizedBox(height: 24),
-                
+
                 // Register Button
                 Consumer<AuthProvider>(
                   builder: (context, authProvider, _) {
@@ -220,7 +299,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   },
                 ),
                 const SizedBox(height: 16),
-                
+
                 // Login Link
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,

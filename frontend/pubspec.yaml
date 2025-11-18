@@ -23,6 +23,7 @@ dependencies:
   # HTTP & API
   http: ^1.2.0
   dio: ^5.4.0
+  http_parser: ^4.0.2
   
   # Local Storage
   shared_preferences: ^2.2.2
@@ -43,6 +44,19 @@ dependencies:
   # Forms & Validation
   flutter_form_builder: ^10.2.0
   form_builder_validators: ^11.2.0
+  fluttertoast: ^9.0.0
+  geolocator: ^14.0.2
+  
+  # Animations & UI
+  animated_text_kit: ^4.2.2
+  lottie: ^3.1.0
+  shimmer: ^3.0.0
+  smooth_page_indicator: ^1.1.0
+  
+  # Internationalization
+  intl: ^0.20.2
+  flutter_localizations:
+    sdk: flutter
   
   # Date & Time
 

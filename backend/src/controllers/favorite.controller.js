@@ -6,6 +6,16 @@ exports.getUserFavorites = async (req, res) => {
   const client = await pool.connect();
   
   try {
+    // Check authentication
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Non authentifié'
+      });
+    }
+
+    console.log('📂 Fetching favorites for user:', req.user.id);
+    
     const result = await client.query(
       `SELECT 
         p.*,
@@ -21,12 +31,19 @@ exports.getUserFavorites = async (req, res) => {
       [req.user.id]
     );
 
+    console.log(`✅ Found ${result.rows.length} favorites`);
+
     res.status(200).json({
       success: true,
       count: result.rows.length,
       data: result.rows
     });
   } catch (error) {
+    console.error('❌ Get favorites error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des favoris',
+      error: error.message
     console.error('Get favorites error:', error);
     res.status(500).json({
       success: false,
@@ -43,6 +60,14 @@ exports.addFavorite = async (req, res) => {
   
   try {
     const { property_id } = req.body;
+
+    // Check if user is authenticated
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Vous devez être connecté pour ajouter aux favoris'
+      });
+    }
 
     if (!property_id) {
       return res.status(400).json({
@@ -71,6 +96,11 @@ exports.addFavorite = async (req, res) => {
     );
 
     if (alreadyFavorite.rows.length > 0) {
+      // Return 200 OK (idempotent operation) instead of 400
+      return res.status(200).json({
+        success: true,
+        message: 'Cette propriété est déjà dans vos favoris',
+        data: { id: alreadyFavorite.rows[0].id, property_id, user_id: req.user.id }
       return res.status(400).json({
         success: false,
         message: 'Cette propriété est déjà dans vos favoris'

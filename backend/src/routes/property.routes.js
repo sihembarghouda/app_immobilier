@@ -4,6 +4,7 @@ const router = express.Router();
 const { body } = require('express-validator');
 const propertyController = require('../controllers/property.controller');
 const authMiddleware = require('../middleware/auth.middleware');
+const { requireAuthenticated, canEditProperty } = require('../middleware/role.middleware');
 const validate = require('../middleware/validation.middleware');
 
 // Validation rules
@@ -26,8 +27,10 @@ const propertyValidation = [
 // Routes
 router.get('/', propertyController.getAllProperties);
 router.get('/:id', propertyController.getPropertyById);
-router.post('/', authMiddleware, propertyValidation, validate, propertyController.createProperty);
-router.put('/:id', authMiddleware, propertyValidation, validate, propertyController.updateProperty);
-router.delete('/:id', authMiddleware, propertyController.deleteProperty);
+// Allow any authenticated user to create properties (simplified roles)
+router.post('/', authMiddleware, requireAuthenticated, propertyValidation, validate, propertyController.createProperty);
+router.put('/:id', authMiddleware, canEditProperty, propertyValidation, validate, propertyController.updateProperty);
+router.delete('/:id', authMiddleware, canEditProperty, propertyController.deleteProperty);
 
+module.exports = router;
 module.exports = router;

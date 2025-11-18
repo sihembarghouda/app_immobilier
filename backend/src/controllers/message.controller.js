@@ -80,6 +80,26 @@ exports.getMessagesWithUser = async (req, res) => {
   
   try {
     const { userId } = req.params;
+    
+    console.log('🔍 getMessagesWithUser - req.user:', req.user);
+    console.log('🔍 getMessagesWithUser - userId param:', userId);
+    
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
+      });
+    }
+
+    // Handle special case: AI chatbot (not a real user)
+    if (userId === 'ai_chatbot_assistant' || isNaN(parseInt(userId))) {
+      return res.status(200).json({
+        success: true,
+        count: 0,
+        data: [],
+        message: 'AI chatbot messages not implemented yet'
+      });
+    }
 
     const result = await client.query(
       `SELECT 
@@ -121,6 +141,16 @@ exports.sendMessage = async (req, res) => {
   
   try {
     const { receiver_id, content, property_id } = req.body;
+    
+    console.log('🔍 sendMessage - req.user:', req.user);
+    console.log('🔍 sendMessage - body:', req.body);
+    
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'User not authenticated'
+      });
+    }
 
     // Check if receiver exists
     const receiverExists = await client.query(
@@ -182,6 +212,14 @@ exports.markMessagesAsRead = async (req, res) => {
   
   try {
     const { userId } = req.params;
+
+    // Handle special case: AI chatbot (no messages to mark)
+    if (userId === 'ai_chatbot_assistant' || isNaN(parseInt(userId))) {
+      return res.status(200).json({
+        success: true,
+        message: 'No messages to mark as read for AI chatbot'
+      });
+    }
 
     await client.query(
       `UPDATE messages 

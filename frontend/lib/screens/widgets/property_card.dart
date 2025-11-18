@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/property.dart';
 import 'package:intl/intl.dart';
+import '../../../widgets/role_protected_widget.dart';
 
 class PropertyCard extends StatelessWidget {
   final Property property;
@@ -67,7 +68,7 @@ class PropertyCard extends StatelessWidget {
                 CachedNetworkImage(
                   imageUrl: property.images.isNotEmpty
                       ? property.images.first
-                      : 'https://via.placeholder.com/400x250',
+                      : '', // Empty string triggers errorWidget
                   height: 200,
                   width: double.infinity,
                   fit: BoxFit.cover,
@@ -81,7 +82,15 @@ class PropertyCard extends StatelessWidget {
                   errorWidget: (context, url, error) => Container(
                     height: 200,
                     color: Colors.grey[300],
-                    child: const Icon(Icons.error),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: const [
+                        Icon(Icons.home_work, size: 64, color: Colors.grey),
+                        SizedBox(height: 8),
+                        Text('Image non disponible',
+                            style: TextStyle(color: Colors.grey)),
+                      ],
+                    ),
                   ),
                 ),
                 // Transaction Type Badge
@@ -115,13 +124,8 @@ class PropertyCard extends StatelessWidget {
                   right: 12,
                   child: CircleAvatar(
                     backgroundColor: Colors.white,
-                    child: IconButton(
-                      icon: Icon(
-                        property.isFavorite
-                            ? Icons.favorite
-                            : Icons.favorite_border,
-                        color: property.isFavorite ? Colors.red : Colors.grey,
-                      ),
+                    child: FavoriteButton(
+                      isFavorite: property.isFavorite,
                       onPressed: onFavorite,
                     ),
                   ),
@@ -168,18 +172,18 @@ class PropertyCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 12),
                   // Property Details
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
                     children: [
                       _buildDetailChip(
                         Icons.square_foot,
                         '${property.surface.toInt()}m²',
                       ),
-                      const SizedBox(width: 8),
                       _buildDetailChip(
                         Icons.bed_outlined,
                         '${property.bedrooms} ch',
                       ),
-                      const SizedBox(width: 8),
                       _buildDetailChip(
                         Icons.bathtub_outlined,
                         '${property.bathrooms} sdb',

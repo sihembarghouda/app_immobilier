@@ -5,6 +5,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../providers/property_provider.dart';
+import '../../providers/location_provider.dart';
+import '../../utils/translations.dart';
 
 class PropertyDetailScreen extends StatefulWidget {
   final String propertyId;
@@ -23,18 +25,44 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
     return formatter.format(price);
   }
 
-  String _getPropertyTypeLabel(String type) {
+  String _getPropertyTypeLabel(String type, BuildContext context) {
     switch (type) {
       case 'apartment':
-        return 'Appartement';
+        return 'apartment'.tr(context);
       case 'house':
-        return 'Maison';
+        return 'house'.tr(context);
       case 'villa':
-        return 'Villa';
+        return 'villa'.tr(context);
       case 'studio':
-        return 'Studio';
+        return 'studio'.tr(context);
       default:
         return type;
+    }
+  }
+
+  Future<void> _showRoute() async {
+    final locationProvider =
+        Provider.of<LocationProvider>(context, listen: false);
+    final property = Provider.of<PropertyProvider>(context, listen: false)
+        .getPropertyById(widget.propertyId);
+
+    if (property == null) return;
+
+    if (!locationProvider.hasLocation) {
+      await locationProvider.getCurrentLocation();
+    }
+
+    if (locationProvider.hasLocation) {
+      final origin =
+          '${locationProvider.latitude},${locationProvider.longitude}';
+      final destination = '${property.latitude},${property.longitude}';
+      final url =
+          'https://www.google.com/maps/dir/?api=1&origin=$origin&destination=$destination&travelmode=driving';
+
+      final Uri uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
     }
   }
 
@@ -186,7 +214,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                           ),
                           if (property.transactionType == 'rent')
                             Text(
-                              'par mois',
+                              'per_month'.tr(context),
                               style: TextStyle(
                                 color: Colors.grey[600],
                                 fontSize: 14,
@@ -197,8 +225,8 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                       Chip(
                         label: Text(
                           property.transactionType == 'sale'
-                              ? 'À vendre'
-                              : 'À louer',
+                              ? 'for_sale'.tr(context)
+                              : 'for_rent'.tr(context),
                         ),
                         backgroundColor: property.transactionType == 'sale'
                             ? Colors.blue.shade100
@@ -216,7 +244,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    _getPropertyTypeLabel(property.type),
+                    _getPropertyTypeLabel(property.type, context),
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.grey[600],
@@ -251,7 +279,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                         child: _buildInfoCard(
                           Icons.square_foot,
                           '${property.surface.toInt()}m²',
-                          'Surface',
+                          'surface'.tr(context),
                           context,
                         ),
                       ),
@@ -260,7 +288,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                         child: _buildInfoCard(
                           Icons.meeting_room,
                           '${property.rooms}',
-                          'Pièces',
+                          'rooms'.tr(context),
                           context,
                         ),
                       ),
@@ -273,7 +301,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                         child: _buildInfoCard(
                           Icons.bed,
                           '${property.bedrooms}',
-                          'Chambres',
+                          'bedrooms'.tr(context),
                           context,
                         ),
                       ),
@@ -282,7 +310,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                         child: _buildInfoCard(
                           Icons.bathtub,
                           '${property.bathrooms}',
-                          'Salles de bain',
+                          'bathrooms'.tr(context),
                           context,
                         ),
                       ),
@@ -293,7 +321,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                   const SizedBox(height: 24),
                   // Description
                   Text(
-                    'Description',
+                    'description'.tr(context),
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -312,7 +340,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                   const SizedBox(height: 24),
                   // Owner Info
                   Text(
-                    'Propriétaire',
+                    'owner'.tr(context),
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.bold,
                         ),
@@ -372,7 +400,7 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                               ? () => _makePhoneCall(property.ownerPhone!)
                               : null,
                           icon: const Icon(Icons.phone),
-                          label: const Text('Appeler'),
+                          label: Text('call'.tr(context)),
                           style: ElevatedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
@@ -385,15 +413,19 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed: () {
-                            // TODO: Navigate to messaging
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Messagerie bientôt disponible'),
-                              ),
+                            // Navigate to chat with property owner
+                            Navigator.pushNamed(
+                              context,
+                              '/chat',
+                              arguments: {
+                                'userId': property.ownerId,
+                                'userName': property.ownerName,
+                                'userAvatar': null,
+                              },
                             );
                           },
                           icon: const Icon(Icons.message),
-                          label: const Text('Message'),
+                          label: Text('message'.tr(context)),
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16),
                             shape: RoundedRectangleBorder(
@@ -403,6 +435,24 @@ class _PropertyDetailScreenState extends State<PropertyDetailScreen> {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Route Button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _showRoute,
+                      icon: const Icon(Icons.directions),
+                      label: Text('show_route'.tr(context)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 100),
                 ],

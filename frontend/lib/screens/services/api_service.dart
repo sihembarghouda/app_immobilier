@@ -1,28 +1,57 @@
 // lib/screens/services/api_service.dart
 import 'package:http/http.dart' as http;
+import 'package:http_parser/http_parser.dart';
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../utils/constants.dart';
 import '../../models/property.dart';
 import '../../models/user.dart';
+import '../../core/services/token_service.dart';
 
 class ApiService {
-  final String baseUrl;
-  String? _token;
+  // Singleton pattern
+  static final ApiService _instance = ApiService._internal();
+  factory ApiService() => _instance;
+  ApiService._internal();
 
-  ApiService({this.baseUrl = AppConstants.apiBaseUrl});
+  final String baseUrl = AppConstants.apiBaseUrl;
+  String? _token;
 
   // Set authentication token
   void setToken(String token) {
     _token = token;
+    print(
+        '🔑 Token set in ApiService: ${token.length > 20 ? token.substring(0, 20) : token}...');
   }
 
-  // Get headers with authentication
-  Map<String, String> _getHeaders() {
-    final headers = {
-      'Content-Type': 'application/json',
-    };
-    if (_token != null) {
+  // Clear token on logout
+  void clearToken() {
+    _token = null;
+    print('🔓 Token cleared from ApiService');
+  }
+
+  // Get headers with authentication (auto-load token)
+  Map<String, String> _baseJsonHeaders() => {
+        'Content-Type': 'application/json',
+      };
+
+  Future<Map<String, String>> _getHeaders() async {
+    final headers = _baseJsonHeaders();
+    if (_token != null && _token!.isNotEmpty) {
       headers['Authorization'] = 'Bearer $_token';
+      print('📤 Sending request with in-memory token');
+      return headers;
+    }
+    try {
+      final tokenService = await TokenService.getInstance();
+      if (tokenService.hasToken) {
+        headers['Authorization'] = 'Bearer ${tokenService.token}';
+        print('📤 Sending request with stored token');
+      } else {
+        print('⚠️  No token available for request');
+      }
+    } catch (e) {
+      print('❌ Failed loading token for headers: $e');
     }
     return headers;
   }
@@ -51,10 +80,8 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> register(
-    String name,
-    String email,
-    String password,
-  ) async {
+      String name, String email, String password, String role,
+      {String? phone}) async {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl${AppConstants.registerEndpoint}'),
@@ -63,13 +90,17 @@ class ApiService {
           'name': name,
           'email': email,
           'password': password,
+          'role': role,
+          if (phone != null && phone.isNotEmpty) 'phone': phone,
         }),
       );
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         return json.decode(response.body);
       } else {
-        throw Exception('Registration failed: ${response.statusCode}');
+        final errorBody = json.decode(response.body);
+        throw Exception(errorBody['message'] ??
+            'Registration failed: ${response.statusCode}');
       }
     } catch (e) {
       throw Exception('Registration error: $e');
@@ -80,7 +111,7 @@ class ApiService {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/auth/me'),
-        headers: _getHeaders(),
+        headers: await _getHeaders(),
       );
 
       if (response.statusCode == 200) {
@@ -90,6 +121,31 @@ class ApiService {
       }
     } catch (e) {
       throw Exception('Get user error: $e');
+    }
+  }
+
+  Future<User> updateProfile(String name, String phone,
+      {String? avatar, String? role}) async {
+    try {
+      final response = await http.put(
+        Uri.parse('$baseUrl/auth/profile'),
+        headers: await _getHeaders(),
+        body: json.encode({
+          'name': name,
+          'phone': phone,
+          if (avatar != null) 'avatar': avatar,
+          if (role != null) 'role': role,
+        }),
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return User.fromJson(data['data'] ?? data);
+      } else {
+        throw Exception('Failed to update profile');
+      }
+    } catch (e) {
+      throw Exception('Update profile error: $e');
     }
   }
 
@@ -118,10 +174,11 @@ class ApiService {
       final uri = Uri.parse('$baseUrl${AppConstants.propertiesEndpoint}')
           .replace(queryParameters: queryParams);
 
-      final response = await http.get(uri, headers: _getHeaders());
+      final response = await http.get(uri, headers: await _getHeaders());
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
+        final responseData = json.decode(response.body);
+        final List<dynamic> data = responseData['data'] ?? [];
         return data.map((json) => Property.fromJson(json)).toList();
       } else {
         throw Exception('Failed to load properties');
@@ -135,11 +192,12 @@ class ApiService {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl${AppConstants.propertiesEndpoint}/$id'),
-        headers: _getHeaders(),
+        headers: await _getHeaders(),
       );
 
       if (response.statusCode == 200) {
-        return Property.fromJson(json.decode(response.body));
+        final responseData = json.decode(response.body);
+        return Property.fromJson(responseData['data'] ?? responseData);
       } else {
         throw Exception('Failed to load property');
       }
@@ -152,12 +210,13 @@ class ApiService {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl${AppConstants.propertiesEndpoint}'),
-        headers: _getHeaders(),
+        headers: await _getHeaders(),
         body: json.encode(property.toJson()),
       );
 
       if (response.statusCode == 201 || response.statusCode == 200) {
-        return Property.fromJson(json.decode(response.body));
+        final responseData = json.decode(response.body);
+        return Property.fromJson(responseData['data'] ?? responseData);
       } else {
         throw Exception('Failed to create property');
       }
@@ -170,7 +229,7 @@ class ApiService {
     try {
       final response = await http.put(
         Uri.parse('$baseUrl${AppConstants.propertiesEndpoint}/$id'),
-        headers: _getHeaders(),
+        headers: await _getHeaders(),
         body: json.encode(property.toJson()),
       );
 
@@ -186,7 +245,7 @@ class ApiService {
     try {
       final response = await http.delete(
         Uri.parse('$baseUrl${AppConstants.propertiesEndpoint}/$id'),
-        headers: _getHeaders(),
+        headers: await _getHeaders(),
       );
 
       if (response.statusCode != 200 && response.statusCode != 204) {
@@ -203,11 +262,12 @@ class ApiService {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl${AppConstants.favoritesEndpoint}'),
-        headers: _getHeaders(),
+        headers: await _getHeaders(),
       );
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
+        final responseData = json.decode(response.body);
+        final List<dynamic> data = responseData['data'] ?? [];
         return data.map((json) => Property.fromJson(json)).toList();
       } else {
         throw Exception('Failed to load favorites');
@@ -221,7 +281,7 @@ class ApiService {
     try {
       final response = await http.post(
         Uri.parse('$baseUrl${AppConstants.favoritesEndpoint}'),
-        headers: _getHeaders(),
+        headers: await _getHeaders(),
         body: json.encode({'property_id': propertyId}),
       );
 
@@ -237,7 +297,7 @@ class ApiService {
     try {
       final response = await http.delete(
         Uri.parse('$baseUrl${AppConstants.favoritesEndpoint}/$propertyId'),
-        headers: _getHeaders(),
+        headers: await _getHeaders(),
       );
 
       if (response.statusCode != 200 && response.statusCode != 204) {
@@ -251,13 +311,28 @@ class ApiService {
   // ========== Upload Image ==========
 
   Future<String> uploadImage(String imagePath) async {
+    if (kIsWeb) {
+      return _uploadImageWeb(imagePath);
+    } else {
+      return _uploadImageMobile(imagePath);
+    }
+  }
+
+  // Mobile upload using MultipartRequest
+  Future<String> _uploadImageMobile(String imagePath) async {
     try {
+      print('📱 Mobile upload starting for: $imagePath');
       var request = http.MultipartRequest(
         'POST',
         Uri.parse('$baseUrl/upload'),
       );
 
-      request.headers.addAll(_getHeaders());
+      // Add authorization header
+      final headers = await _getHeaders();
+      if (headers['Authorization'] != null) {
+        request.headers['Authorization'] = headers['Authorization']!;
+      }
+
       request.files.add(await http.MultipartFile.fromPath('image', imagePath));
 
       var response = await request.send();
@@ -265,12 +340,99 @@ class ApiService {
       if (response.statusCode == 200 || response.statusCode == 201) {
         final responseData = await response.stream.bytesToString();
         final data = json.decode(responseData);
-        return data['url']; // URL de l'image uploadée
+
+        // Extract URL from response
+        if (data['data'] != null && data['data']['url'] != null) {
+          print('✅ Mobile upload successful: ${data['data']['url']}');
+          return data['data']['url'];
+        } else if (data['url'] != null) {
+          print('✅ Mobile upload successful: ${data['url']}');
+          return data['url'];
+        } else {
+          throw Exception('No URL in upload response');
+        }
       } else {
-        throw Exception('Failed to upload image');
+        final responseData = await response.stream.bytesToString();
+        final error = json.decode(responseData);
+        throw Exception(error['message'] ?? 'Failed to upload image');
       }
     } catch (e) {
-      throw Exception('Upload image error: $e');
+      print('❌ Mobile upload error: $e');
+      throw Exception('Mobile upload error: $e');
+    }
+  }
+
+  // Web upload using MultipartRequest with bytes
+  Future<String> _uploadImageWeb(String base64DataOrBytes) async {
+    try {
+      print('🌐 Web upload starting');
+
+      // Convert base64 to bytes if needed
+      List<int> bytes;
+      String mimeSubtype = 'jpeg';
+      if (base64DataOrBytes.startsWith('data:')) {
+        // Base64 data URL
+        final parts = base64DataOrBytes.split(',');
+        final header = parts[0];
+        final base64String = parts[1];
+        if (header.contains('image/png')) mimeSubtype = 'png';
+        if (header.contains('image/webp')) mimeSubtype = 'webp';
+        bytes = base64.decode(base64String);
+      } else {
+        // Already bytes as string (fallback)
+        bytes = base64.decode(base64DataOrBytes);
+      }
+
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/upload/web'),
+      );
+
+      // Add authorization header
+      final headers = await _getHeaders();
+      if (headers['Authorization'] != null) {
+        request.headers['Authorization'] = headers['Authorization']!;
+      }
+
+      // Add file from bytes
+      request.files.add(http.MultipartFile.fromBytes(
+        'image', // Field name expected by multer
+        bytes,
+        filename: 'web-${DateTime.now().millisecondsSinceEpoch}.$mimeSubtype',
+        contentType: MediaType('image', mimeSubtype),
+      ));
+
+      var response = await request.send();
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final responseData = await response.stream.bytesToString();
+        final data = json.decode(responseData);
+
+        print('📦 Web upload response: $responseData');
+
+        // Extract URL from response
+        if (data['imageUrl'] != null) {
+          print('✅ Web upload successful: ${data['imageUrl']}');
+          return data['imageUrl'];
+        } else if (data['url'] != null) {
+          print('✅ Web upload successful: ${data['url']}');
+          return data['url'];
+        } else if (data['data'] != null && data['data']['url'] != null) {
+          print('✅ Web upload successful: ${data['data']['url']}');
+          return data['data']['url'];
+        } else {
+          throw Exception('No URL in upload response');
+        }
+      } else {
+        final responseData = await response.stream.bytesToString();
+        print('❌ Web upload failed (${response.statusCode}): $responseData');
+        final error = json.decode(responseData);
+        throw Exception(
+            error['message'] ?? error['error'] ?? 'Failed to upload image');
+      }
+    } catch (e) {
+      print('❌ Web upload error: $e');
+      throw Exception('Web upload error: $e');
     }
   }
 
@@ -280,11 +442,12 @@ class ApiService {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl${AppConstants.messagesEndpoint}/conversations'),
-        headers: _getHeaders(),
+        headers: await _getHeaders(),
       );
 
       if (response.statusCode == 200) {
-        return json.decode(response.body);
+        final responseData = json.decode(response.body);
+        return responseData['data'] ?? [];
       } else {
         throw Exception('Failed to load conversations');
       }
@@ -297,11 +460,12 @@ class ApiService {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl${AppConstants.messagesEndpoint}/$userId'),
-        headers: _getHeaders(),
+        headers: await _getHeaders(),
       );
 
       if (response.statusCode == 200) {
-        return json.decode(response.body);
+        final responseData = json.decode(response.body);
+        return responseData['data'] ?? [];
       } else {
         throw Exception('Failed to load messages');
       }
@@ -316,18 +480,25 @@ class ApiService {
     String? propertyId,
   }) async {
     try {
+      // Convert receiverId to int for backend validation
+      final receiverIdInt = int.tryParse(receiverId);
+      if (receiverIdInt == null) {
+        throw Exception('Invalid receiver ID: must be a number');
+      }
+
       final response = await http.post(
         Uri.parse('$baseUrl${AppConstants.messagesEndpoint}'),
-        headers: _getHeaders(),
+        headers: await _getHeaders(),
         body: json.encode({
-          'receiver_id': receiverId,
+          'receiver_id': receiverIdInt,
           'content': content,
-          'property_id': propertyId,
+          'property_id': propertyId != null ? int.tryParse(propertyId) : null,
         }),
       );
 
       if (response.statusCode == 201 || response.statusCode == 200) {
-        return json.decode(response.body);
+        final responseData = json.decode(response.body);
+        return responseData['data'] ?? responseData;
       } else {
         throw Exception('Failed to send message');
       }
@@ -340,7 +511,7 @@ class ApiService {
     try {
       final response = await http.put(
         Uri.parse('$baseUrl${AppConstants.messagesEndpoint}/$userId/read'),
-        headers: _getHeaders(),
+        headers: await _getHeaders(),
       );
 
       if (response.statusCode != 200) {

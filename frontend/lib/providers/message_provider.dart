@@ -1,23 +1,34 @@
 // providers/message_provider.dart
 import 'package:flutter/material.dart';
 import '../models/message.dart';
+import '../core/services/api_service.dart';
 
 class MessageProvider with ChangeNotifier {
   List<Message> _messages = [];
   List<Conversation> _conversations = [];
   bool _isLoading = false;
   String? _error;
+  ApiService? _apiService;
 
   List<Message> get messages => _messages;
   List<Conversation> get conversations => _conversations;
   bool get isLoading => _isLoading;
   String? get error => _error;
 
+  // Initialize API service (call once)
+  Future<void> initialize() async {
+    _apiService ??= await ApiService.getInstance();
+  }
+
+  Future<ApiService> _ensureApiService() async {
+    _apiService ??= await ApiService.getInstance();
+    return _apiService!;
+  }
+
   // Get messages with a specific user
   List<Message> getMessagesWithUser(String userId) {
     return _messages
-        .where((msg) =>
-            msg.senderId == userId || msg.receiverId == userId)
+        .where((msg) => msg.senderId == userId || msg.receiverId == userId)
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
@@ -29,14 +40,47 @@ class MessageProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      // TODO: Call API
-      await Future.delayed(const Duration(seconds: 1));
+      final api = await _ensureApiService();
+      final data = await api.getConversations();
 
-      _conversations = _getMockConversations();
+      _conversations = data.map((conv) {
+        final lastMsgData = conv['last_message'] as Map<String, dynamic>?;
+        Message? lastMessage;
+
+        if (lastMsgData != null) {
+          lastMessage = Message(
+            id: lastMsgData['id']?.toString() ?? '',
+            senderId: lastMsgData['sender_id']?.toString() ?? '',
+            senderName: lastMsgData['sender_name'] ?? '',
+            receiverId: lastMsgData['receiver_id'].toString(),
+            receiverName: lastMsgData['receiver_name'] ?? '',
+            content: lastMsgData['content'] ?? '',
+            createdAt: DateTime.tryParse(
+                    lastMsgData['created_at']?.toString() ?? '') ??
+                DateTime.now(),
+            isRead: (lastMsgData['is_read'] is bool)
+                ? lastMsgData['is_read']
+                : (lastMsgData['is_read']?.toString() == 'true'),
+          );
+        }
+
+        return Conversation(
+          id: conv['id']?.toString() ?? '',
+          otherUserId: conv['other_user_id']?.toString() ?? '',
+          otherUserName: (conv['other_user_name'] ?? 'Unknown').toString(),
+          otherUserAvatar: conv['other_user_avatar'],
+          lastMessage: lastMessage,
+          unreadCount:
+              int.tryParse((conv['unread_count'] ?? 0).toString()) ?? 0,
+          updatedAt: DateTime.tryParse(conv['updated_at']?.toString() ?? '') ??
+              (lastMessage?.createdAt ?? DateTime.now()),
+        );
+      }).toList();
 
       _isLoading = false;
       notifyListeners();
     } catch (e) {
+      print('❌ Fetch conversations error: $e');
       _error = e.toString();
       _isLoading = false;
       notifyListeners();
@@ -50,13 +94,22 @@ class MessageProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      // TODO: Call API
-      await Future.delayed(const Duration(seconds: 1));
+      final api = await _ensureApiService();
+      final data = await api.getMessages(userId);
 
-      // Filter messages for this user
-      _messages = _getMockMessages()
-          .where((msg) =>
-              msg.senderId == userId || msg.receiverId == userId)
+      _messages = data
+          .map((msg) => Message(
+                id: msg['id'].toString(),
+                senderId: msg['sender_id'].toString(),
+                senderName: msg['sender_name'] ?? 'Unknown',
+                senderAvatar: msg['sender_avatar'],
+                receiverId: msg['receiver_id'].toString(),
+                receiverName: msg['receiver_name'] ?? 'Unknown',
+                receiverAvatar: msg['receiver_avatar'],
+                content: msg['content'] ?? '',
+                createdAt: DateTime.parse(msg['created_at']),
+                isRead: msg['is_read'] ?? false,
+              ))
           .toList();
 
       // Mark messages as read
@@ -65,6 +118,7 @@ class MessageProvider with ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     } catch (e) {
+      print('❌ Fetch messages error: $e');
       _error = e.toString();
       _isLoading = false;
       notifyListeners();
@@ -76,15 +130,28 @@ class MessageProvider with ChangeNotifier {
     try {
       // Optimistically add message to UI
       _messages.insert(0, message);
-      notifyListeners();
 
-      // TODO: Call API to send message
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Don't send AI chatbot messages to backend (they're client-side only)
+      final isChatbotMessage = message.senderId == 'ai_chatbot_assistant' ||
+          message.receiverId == 'ai_chatbot_assistant';
 
-      // Update conversation list
+      if (!isChatbotMessage) {
+        // Call API to send message to real user
+        final api = await _ensureApiService();
+        await api.sendMessage(
+          message.receiverId,
+          message.content,
+        );
+        print('✅ Message sent successfully to user ${message.receiverId}');
+      } else {
+        print('💬 AI chatbot message (client-side only)');
+      }
+
+      // Update conversation list AFTER API success
       _updateConversationList(message);
-
+      notifyListeners();
     } catch (e) {
+      print('❌ Send message error: $e');
       _error = e.toString();
       // Remove message if failed
       _messages.removeWhere((m) => m.id == message.id);
@@ -95,8 +162,9 @@ class MessageProvider with ChangeNotifier {
   // Mark messages as read
   Future<void> markMessagesAsRead(String userId) async {
     try {
-      // TODO: Call API
-      
+      final api = await _ensureApiService();
+      await api.markMessagesAsRead(userId);
+
       // Update local state
       for (var i = 0; i < _messages.length; i++) {
         if (_messages[i].senderId == userId && !_messages[i].isRead) {
@@ -122,6 +190,7 @@ class MessageProvider with ChangeNotifier {
 
       notifyListeners();
     } catch (e) {
+      print('❌ Mark as read error: $e');
       _error = e.toString();
     }
   }
@@ -151,7 +220,7 @@ class MessageProvider with ChangeNotifier {
     // Sort by updated time
     _conversations.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
 
-    notifyListeners();
+    // Don't call notifyListeners here - caller handles it
   }
 
   // Get unread message count
@@ -160,109 +229,5 @@ class MessageProvider with ChangeNotifier {
       0,
       (sum, conv) => sum + conv.unreadCount,
     );
-  }
-
-  // Mock data generators
-  List<Conversation> _getMockConversations() {
-    return [
-      Conversation(
-        id: '1',
-        otherUserId: '2',
-        otherUserName: 'Ahmed Ben Ali',
-        otherUserAvatar: null,
-        lastMessage: Message(
-          id: '1',
-          senderId: '2',
-          senderName: 'Ahmed Ben Ali',
-          receiverId: '1',
-          receiverName: 'John Doe',
-          content: 'Bonjour, est-ce que l\'appartement est toujours disponible ?',
-          createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-        ),
-        unreadCount: 2,
-        updatedAt: DateTime.now().subtract(const Duration(hours: 2)),
-      ),
-      Conversation(
-        id: '2',
-        otherUserId: '3',
-        otherUserName: 'Fatma Trabelsi',
-        otherUserAvatar: null,
-        lastMessage: Message(
-          id: '2',
-          senderId: '1',
-          senderName: 'John Doe',
-          receiverId: '3',
-          receiverName: 'Fatma Trabelsi',
-          content: 'Merci pour votre réponse',
-          createdAt: DateTime.now().subtract(const Duration(days: 1)),
-          isRead: true,
-        ),
-        unreadCount: 0,
-        updatedAt: DateTime.now().subtract(const Duration(days: 1)),
-      ),
-      Conversation(
-        id: '3',
-        otherUserId: '4',
-        otherUserName: 'Mohamed Saidi',
-        otherUserAvatar: null,
-        lastMessage: Message(
-          id: '3',
-          senderId: '4',
-          senderName: 'Mohamed Saidi',
-          receiverId: '1',
-          receiverName: 'John Doe',
-          content: 'Je suis intéressé par votre villa',
-          createdAt: DateTime.now().subtract(const Duration(days: 3)),
-          isRead: true,
-        ),
-        unreadCount: 0,
-        updatedAt: DateTime.now().subtract(const Duration(days: 3)),
-      ),
-    ];
-  }
-
-  List<Message> _getMockMessages() {
-    return [
-      Message(
-        id: '1',
-        senderId: '2',
-        senderName: 'Ahmed Ben Ali',
-        receiverId: '1',
-        receiverName: 'John Doe',
-        content: 'Bonjour',
-        createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-        isRead: true,
-      ),
-      Message(
-        id: '2',
-        senderId: '1',
-        senderName: 'John Doe',
-        receiverId: '2',
-        receiverName: 'Ahmed Ben Ali',
-        content: 'Bonjour ! Comment puis-je vous aider ?',
-        createdAt: DateTime.now().subtract(const Duration(hours: 3, minutes: 5)),
-        isRead: true,
-      ),
-      Message(
-        id: '3',
-        senderId: '2',
-        senderName: 'Ahmed Ben Ali',
-        receiverId: '1',
-        receiverName: 'John Doe',
-        content: 'Est-ce que l\'appartement est toujours disponible ?',
-        createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-        isRead: false,
-      ),
-      Message(
-        id: '4',
-        senderId: '2',
-        senderName: 'Ahmed Ben Ali',
-        receiverId: '1',
-        receiverName: 'John Doe',
-        content: 'Je souhaiterais organiser une visite',
-        createdAt: DateTime.now().subtract(const Duration(hours: 2, minutes: 2)),
-        isRead: false,
-      ),
-    ];
   }
 }
